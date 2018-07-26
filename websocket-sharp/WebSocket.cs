@@ -615,12 +615,12 @@ namespace WebSocketSharp
           Uri uri;
           if (!Uri.TryCreate (value, UriKind.Absolute, out uri)) {
             msg = "Not an absolute URI string.";
-            throw new ArgumentException (msg, "value");
+            throw new ArgumentException (msg, value);
           }
 
           if (uri.Segments.Length > 1) {
             msg = "It includes the path segments.";
-            throw new ArgumentException (msg, "value");
+            throw new ArgumentException (msg, value);
           }
         }
 
@@ -641,16 +641,11 @@ namespace WebSocketSharp
     }
 
     /// <summary>
-    /// Gets the name of subprotocol selected by the server.
+    /// Gets the name of the subprotocol selected by server.
     /// </summary>
     /// <value>
-    ///   <para>
-    ///   A <see cref="string"/> that will be one of the names of
-    ///   subprotocols specified by client.
-    ///   </para>
-    ///   <para>
-    ///   An empty string if not specified or selected.
-    ///   </para>
+    /// A <see cref="string"/> that will be one of the names of the subprotocols
+    /// specified by client, or an empty string if not specified or selected.
     /// </value>
     public string Protocol {
       get {
@@ -1552,7 +1547,9 @@ namespace WebSocketSharp
         e = _messageEventQueue.Dequeue ();
       }
 
-      _message.BeginInvoke (e, ar => _message.EndInvoke (ar), null);
+      _message.Invoke(e);
+      // BeginInvoke is not supported in .NET Core
+      //_message.BeginInvoke (e, ar => _message.EndInvoke (ar), null);
     }
 
     private bool ping (byte[] data)
@@ -2572,7 +2569,7 @@ namespace WebSocketSharp
     }
 
     /// <summary>
-    /// Closes the connection with the specified code.
+    /// Closes the connection with the specified <paramref name="code"/>.
     /// </summary>
     /// <remarks>
     /// This method does nothing if the current state of the connection is
@@ -2580,8 +2577,8 @@ namespace WebSocketSharp
     /// </remarks>
     /// <param name="code">
     ///   <para>
-    ///   A <see cref="ushort"/> that represents the status code indicating
-    ///   the reason for the close.
+    ///   A <see cref="ushort"/> that represents the status code
+    ///   indicating the reason for the close.
     ///   </para>
     ///   <para>
     ///   The status codes are defined in
@@ -2626,7 +2623,7 @@ namespace WebSocketSharp
     }
 
     /// <summary>
-    /// Closes the connection with the specified code.
+    /// Closes the connection with the specified <paramref name="code"/>.
     /// </summary>
     /// <remarks>
     /// This method does nothing if the current state of the connection is
@@ -2671,7 +2668,8 @@ namespace WebSocketSharp
     }
 
     /// <summary>
-    /// Closes the connection with the specified code and reason.
+    /// Closes the connection with the specified <paramref name="code"/> and
+    /// <paramref name="reason"/>.
     /// </summary>
     /// <remarks>
     /// This method does nothing if the current state of the connection is
@@ -2679,8 +2677,8 @@ namespace WebSocketSharp
     /// </remarks>
     /// <param name="code">
     ///   <para>
-    ///   A <see cref="ushort"/> that represents the status code indicating
-    ///   the reason for the close.
+    ///   A <see cref="ushort"/> that represents the status code
+    ///   indicating the reason for the close.
     ///   </para>
     ///   <para>
     ///   The status codes are defined in
@@ -2723,7 +2721,8 @@ namespace WebSocketSharp
     ///   -or-
     ///   </para>
     ///   <para>
-    ///   <paramref name="code"/> is 1005 (no status) and there is reason.
+    ///   <paramref name="code"/> is 1005 (no status) and
+    ///   there is <paramref name="reason"/>.
     ///   </para>
     ///   <para>
     ///   -or-
@@ -2774,7 +2773,8 @@ namespace WebSocketSharp
     }
 
     /// <summary>
-    /// Closes the connection with the specified code and reason.
+    /// Closes the connection with the specified <paramref name="code"/> and
+    /// <paramref name="reason"/>.
     /// </summary>
     /// <remarks>
     /// This method does nothing if the current state of the connection is
@@ -2815,7 +2815,8 @@ namespace WebSocketSharp
     ///   </para>
     ///   <para>
     ///   <paramref name="code"/> is
-    ///   <see cref="CloseStatusCode.NoStatus"/> and there is reason.
+    ///   <see cref="CloseStatusCode.NoStatus"/> and
+    ///   there is <paramref name="reason"/>.
     ///   </para>
     ///   <para>
     ///   -or-
@@ -3352,7 +3353,7 @@ namespace WebSocketSharp
     }
 
     /// <summary>
-    /// Sends the specified data using the WebSocket connection.
+    /// Sends <paramref name="data"/> using the WebSocket connection.
     /// </summary>
     /// <param name="data">
     /// An array of <see cref="byte"/> that represents the binary data to send.
@@ -3379,13 +3380,11 @@ namespace WebSocketSharp
     /// <summary>
     /// Sends the specified file using the WebSocket connection.
     /// </summary>
+    /// <remarks>
+    /// The file is sent as the binary data.
+    /// </remarks>
     /// <param name="fileInfo">
-    ///   <para>
-    ///   A <see cref="FileInfo"/> that specifies the file to send.
-    ///   </para>
-    ///   <para>
-    ///   The file is sent as the binary data.
-    ///   </para>
+    /// A <see cref="FileInfo"/> that specifies the file to send.
     /// </param>
     /// <exception cref="InvalidOperationException">
     /// The current state of the connection is not Open.
@@ -3429,7 +3428,7 @@ namespace WebSocketSharp
     }
 
     /// <summary>
-    /// Sends the specified data using the WebSocket connection.
+    /// Sends <paramref name="data"/> using the WebSocket connection.
     /// </summary>
     /// <param name="data">
     /// A <see cref="string"/> that represents the text data to send.
@@ -3463,15 +3462,14 @@ namespace WebSocketSharp
     }
 
     /// <summary>
-    /// Sends the data from the specified stream using the WebSocket connection.
+    /// Sends the data from <paramref name="stream"/> using the WebSocket
+    /// connection.
     /// </summary>
+    /// <remarks>
+    /// The data is sent as the binary data.
+    /// </remarks>
     /// <param name="stream">
-    ///   <para>
-    ///   A <see cref="Stream"/> instance from which to read the data to send.
-    ///   </para>
-    ///   <para>
-    ///   The data is sent as the binary data.
-    ///   </para>
+    /// A <see cref="Stream"/> instance from which to read the data to send.
     /// </param>
     /// <param name="length">
     /// An <see cref="int"/> that specifies the number of bytes to send.
@@ -3540,7 +3538,8 @@ namespace WebSocketSharp
     }
 
     /// <summary>
-    /// Sends the specified data asynchronously using the WebSocket connection.
+    /// Sends <paramref name="data"/> asynchronously using the WebSocket
+    /// connection.
     /// </summary>
     /// <remarks>
     /// This method does not wait for the send to be complete.
@@ -3584,15 +3583,15 @@ namespace WebSocketSharp
     /// Sends the specified file asynchronously using the WebSocket connection.
     /// </summary>
     /// <remarks>
-    /// This method does not wait for the send to be complete.
-    /// </remarks>
-    /// <param name="fileInfo">
-    ///   <para>
-    ///   A <see cref="FileInfo"/> that specifies the file to send.
-    ///   </para>
     ///   <para>
     ///   The file is sent as the binary data.
     ///   </para>
+    ///   <para>
+    ///   This method does not wait for the send to be complete.
+    ///   </para>
+    /// </remarks>
+    /// <param name="fileInfo">
+    /// A <see cref="FileInfo"/> that specifies the file to send.
     /// </param>
     /// <param name="completed">
     ///   <para>
@@ -3649,7 +3648,8 @@ namespace WebSocketSharp
     }
 
     /// <summary>
-    /// Sends the specified data asynchronously using the WebSocket connection.
+    /// Sends <paramref name="data"/> asynchronously using the WebSocket
+    /// connection.
     /// </summary>
     /// <remarks>
     /// This method does not wait for the send to be complete.
@@ -3699,19 +3699,19 @@ namespace WebSocketSharp
     }
 
     /// <summary>
-    /// Sends the data from the specified stream asynchronously using
+    /// Sends the data from <paramref name="stream"/> asynchronously using
     /// the WebSocket connection.
     /// </summary>
     /// <remarks>
-    /// This method does not wait for the send to be complete.
-    /// </remarks>
-    /// <param name="stream">
-    ///   <para>
-    ///   A <see cref="Stream"/> instance from which to read the data to send.
-    ///   </para>
     ///   <para>
     ///   The data is sent as the binary data.
     ///   </para>
+    ///   <para>
+    ///   This method does not wait for the send to be complete.
+    ///   </para>
+    /// </remarks>
+    /// <param name="stream">
+    /// A <see cref="Stream"/> instance from which to read the data to send.
     /// </param>
     /// <param name="length">
     /// An <see cref="int"/> that specifies the number of bytes to send.

@@ -8,7 +8,7 @@
  * The MIT License
  *
  * Copyright (c) 2005 Novell, Inc. (http://www.novell.com)
- * Copyright (c) 2012-2018 sta.blockhead
+ * Copyright (c) 2012-2015 sta.blockhead
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -70,13 +70,13 @@ namespace WebSocketSharp.Net
     private Stream                 _inputStream;
     private Version                _protocolVersion;
     private NameValueCollection    _queryString;
-    private string                 _rawUrl;
     private Guid                   _requestTraceIdentifier;
+    private string                 _uri;
     private Uri                    _url;
     private Uri                    _urlReferrer;
-    private bool                   _urlSet;
-    private string                 _userHostName;
     private string[]               _userLanguages;
+    private bool                   _websocketRequest;
+    private bool                   _websocketRequestSet;
 
     #endregion
 
@@ -114,7 +114,7 @@ namespace WebSocketSharp.Net
     ///   types specified in the value of the Accept header.
     ///   </para>
     ///   <para>
-    ///   <see langword="null"/> if the header is not present.
+    ///   <see langword="null"/> if the Accept header is not present.
     ///   </para>
     /// </value>
     public string[] AcceptTypes {
@@ -156,8 +156,8 @@ namespace WebSocketSharp.Net
     /// </summary>
     /// <value>
     ///   <para>
-    ///   A <see cref="Encoding"/> converted from the charset value of the
-    ///   Content-Type header.
+    ///   A <see cref="Encoding"/> from the charset value of the Content-Type
+    ///   header.
     ///   </para>
     ///   <para>
     ///   <see cref="Encoding.UTF8"/> if the charset value is not available.
@@ -165,24 +165,20 @@ namespace WebSocketSharp.Net
     /// </value>
     public Encoding ContentEncoding {
       get {
-        if (_contentEncoding == null)
-          _contentEncoding = getContentEncoding () ?? Encoding.UTF8;
-
-        return _contentEncoding;
+        return _contentEncoding ?? Encoding.UTF8;
       }
     }
 
     /// <summary>
-    /// Gets the length in bytes of the entity body data included in the
-    /// request.
+    /// Gets the length in bytes of the entity body data included in
+    /// the request.
     /// </summary>
     /// <value>
     ///   <para>
-    ///   A <see cref="long"/> converted from the value of the Content-Length
-    ///   header.
+    ///   A <see cref="long"/> from the value of the Content-Length header.
     ///   </para>
     ///   <para>
-    ///   -1 if the header is not present.
+    ///   -1 if the value is not known.
     ///   </para>
     /// </value>
     public long ContentLength64 {
@@ -195,13 +191,8 @@ namespace WebSocketSharp.Net
     /// Gets the media type of the entity body data included in the request.
     /// </summary>
     /// <value>
-    ///   <para>
-    ///   A <see cref="string"/> that represents the value of the Content-Type
-    ///   header.
-    ///   </para>
-    ///   <para>
-    ///   <see langword="null"/> if the header is not present.
-    ///   </para>
+    /// A <see cref="string"/> that represents the value of the Content-Type
+    /// header.
     /// </value>
     public string ContentType {
       get {
@@ -276,13 +267,19 @@ namespace WebSocketSharp.Net
     ///   A <see cref="Stream"/> that contains the entity body data.
     ///   </para>
     ///   <para>
-    ///   <see cref="Stream.Null"/> if the entity body data is not available.
+    ///   <see cref="Stream.Null"/> if not included.
     ///   </para>
     /// </value>
     public Stream InputStream {
       get {
-        if (_inputStream == null)
-          _inputStream = getInputStream () ?? Stream.Null;
+        if (!HasEntityBody)
+          return Stream.Null;
+
+        if (_inputStream == null) {
+          _inputStream = _connection.GetRequestStream (
+                           _contentLength, _chunked
+                         );
+        }
 
         return _inputStream;
       }
@@ -319,7 +316,8 @@ namespace WebSocketSharp.Net
     /// the request.
     /// </summary>
     /// <value>
-    /// <c>true</c> if the connection is secure; otherwise, <c>false</c>.
+    /// <c>true</c> if the connection is a secure connection; otherwise,
+    /// <c>false</c>.
     /// </value>
     public bool IsSecureConnection {
       get {
@@ -337,9 +335,15 @@ namespace WebSocketSharp.Net
     /// </value>
     public bool IsWebSocketRequest {
       get {
-        return _httpMethod == "GET"
-               && _protocolVersion > HttpVersion.Version10
-               && _headers.Upgrades ("websocket");
+        if (!_websocketRequestSet) {
+          _websocketRequest = _httpMethod == "GET"
+                              && _protocolVersion > HttpVersion.Version10
+                              && _headers.Upgrades ("websocket");
+
+          _websocketRequestSet = true;
+        }
+
+        return _websocketRequest;
       }
     }
 
@@ -397,10 +401,8 @@ namespace WebSocketSharp.Net
     public NameValueCollection QueryString {
       get {
         if (_queryString == null) {
-          var url = Url;
           _queryString = HttpUtility.InternalParseQueryString (
-                           url != null ? url.Query : null,
-                           Encoding.UTF8
+                           _url.Query, Encoding.UTF8
                          );
         }
 
@@ -409,15 +411,21 @@ namespace WebSocketSharp.Net
     }
 
     /// <summary>
-    /// Gets the raw URL specified by the client.
+    /// Gets the raw URL (without the scheme, host, and port) requested by
+    /// the client.
     /// </summary>
     /// <value>
-    /// A <see cref="string"/> that represents the request target specified in
-    /// the request line.
+    ///   <para>
+    ///   A <see cref="string"/> that represents the raw URL specified in
+    ///   the request.
+    ///   </para>
+    ///   <para>
+    ///   It includes the query string if present.
+    ///   </para>
     /// </value>
     public string RawUrl {
       get {
-        return _rawUrl;
+        return _url.PathAndQuery;
       }
     }
 
@@ -450,26 +458,10 @@ namespace WebSocketSharp.Net
     /// Gets the URL requested by the client.
     /// </summary>
     /// <value>
-    ///   <para>
-    ///   A <see cref="Uri"/> that represents the URL parsed from the request.
-    ///   </para>
-    ///   <para>
-    ///   <see langword="null"/> if the URL cannot be parsed.
-    ///   </para>
+    /// A <see cref="Uri"/> that represents the URL specified in the request.
     /// </value>
     public Uri Url {
       get {
-        if (!_urlSet) {
-          _url = HttpUtility.CreateRequestUrl (
-                   _rawUrl,
-                   _userHostName ?? UserHostAddress,
-                   IsWebSocketRequest,
-                   IsSecureConnection
-                 );
-
-          _urlSet = true;
-        }
-
         return _url;
       }
     }
@@ -479,21 +471,14 @@ namespace WebSocketSharp.Net
     /// </summary>
     /// <value>
     ///   <para>
-    ///   A <see cref="Uri"/> converted from the value of the Referer header.
+    ///   A <see cref="Uri"/> from the value of the Referer header.
     ///   </para>
     ///   <para>
-    ///   <see langword="null"/> if the header value is not available.
+    ///   <see langword="null"/> if the Referer header is not present.
     ///   </para>
     /// </value>
     public Uri UrlReferrer {
       get {
-        var val = _headers["Referer"];
-        if (val == null)
-          return null;
-
-        if (_urlReferrer == null)
-          _urlReferrer = val.ToUri ();
-
         return _urlReferrer;
       }
     }
@@ -507,7 +492,7 @@ namespace WebSocketSharp.Net
     ///   header.
     ///   </para>
     ///   <para>
-    ///   <see langword="null"/> if the header is not present.
+    ///   <see langword="null"/> if the User-Agent header is not present.
     ///   </para>
     /// </value>
     public string UserAgent {
@@ -540,12 +525,12 @@ namespace WebSocketSharp.Net
     ///   It includes the port number if provided.
     ///   </para>
     ///   <para>
-    ///   <see langword="null"/> if the header is not present.
+    ///   <see langword="null"/> if the Host header is not present.
     ///   </para>
     /// </value>
     public string UserHostName {
       get {
-        return _userHostName;
+        return _headers["Host"];
       }
     }
 
@@ -559,7 +544,7 @@ namespace WebSocketSharp.Net
     ///   header.
     ///   </para>
     ///   <para>
-    ///   <see langword="null"/> if the header is not present.
+    ///   <see langword="null"/> if the Accept-Language header is not present.
     ///   </para>
     /// </value>
     public string[] UserLanguages {
@@ -577,60 +562,10 @@ namespace WebSocketSharp.Net
 
     #endregion
 
-    #region Private Methods
-
-    private void finishInitialization10 ()
-    {
-      var transferEnc = _headers["Transfer-Encoding"];
-      if (transferEnc != null) {
-        _context.ErrorMessage = "Invalid Transfer-Encoding header";
-        return;
-      }
-
-      if (_httpMethod == "POST") {
-        if (_contentLength == -1) {
-          _context.ErrorMessage = "Content-Length header required";
-          return;
-        }
-
-        if (_contentLength == 0) {
-          _context.ErrorMessage = "Invalid Content-Length header";
-          return;
-        }
-      }
-    }
-
-    private Encoding getContentEncoding ()
-    {
-      var val = _headers["Content-Type"];
-      if (val == null)
-        return null;
-
-      Encoding ret;
-      HttpUtility.TryGetEncoding (val, out ret);
-
-      return ret;
-    }
-
-    private RequestStream getInputStream ()
-    {
-      return _contentLength > 0 || _chunked
-             ? _connection.GetRequestStream (_contentLength, _chunked)
-             : null;
-    }
-
-    #endregion
-
     #region Internal Methods
 
     internal void AddHeader (string headerField)
     {
-      var start = headerField[0];
-      if (start == ' ' || start == '\t') {
-        _context.ErrorMessage = "Invalid header field";
-        return;
-      }
-
       var colon = headerField.IndexOf (':');
       if (colon < 1) {
         _context.ErrorMessage = "Invalid header field";
@@ -650,27 +585,7 @@ namespace WebSocketSharp.Net
       _headers.InternalSet (name, val, false);
 
       var lower = name.ToLower (CultureInfo.InvariantCulture);
-      if (lower == "host") {
-        if (_userHostName != null) {
-          _context.ErrorMessage = "Invalid Host header";
-          return;
-        }
-
-        if (val.Length == 0) {
-          _context.ErrorMessage = "Invalid Host header";
-          return;
-        }
-
-        _userHostName = val;
-        return;
-      }
-
       if (lower == "content-length") {
-        if (_contentLength > -1) {
-          _context.ErrorMessage = "Invalid Content-Length header";
-          return;
-        }
-
         long len;
         if (!Int64.TryParse (val, out len)) {
           _context.ErrorMessage = "Invalid Content-Length header";
@@ -685,22 +600,58 @@ namespace WebSocketSharp.Net
         _contentLength = len;
         return;
       }
+
+      if (lower == "content-type") {
+        try {
+          _contentEncoding = HttpUtility.GetEncoding (val);
+        }
+        catch {
+          _context.ErrorMessage = "Invalid Content-Type header";
+        }
+
+        return;
+      }
+
+      if (lower == "referer") {
+        var referer = val.ToUri ();
+        if (referer == null) {
+          _context.ErrorMessage = "Invalid Referer header";
+          return;
+        }
+
+        _urlReferrer = referer;
+        return;
+      }
     }
 
     internal void FinishInitialization ()
     {
-      if (_protocolVersion == HttpVersion.Version10) {
-        finishInitialization10 ();
+      var host = _headers["Host"];
+      var hasHost = host != null && host.Length > 0;
+      if (_protocolVersion > HttpVersion.Version10 && !hasHost) {
+        _context.ErrorMessage = "Invalid Host header";
         return;
       }
 
-      if (_userHostName == null) {
-        _context.ErrorMessage = "Host header required";
+      _url = HttpUtility.CreateRequestUrl (
+               _uri,
+               hasHost ? host : UserHostAddress,
+               IsWebSocketRequest,
+               IsSecureConnection
+             );
+
+      if (_url == null) {
+        _context.ErrorMessage = "Invalid request url";
         return;
       }
 
       var transferEnc = _headers["Transfer-Encoding"];
       if (transferEnc != null) {
+        if (_protocolVersion < HttpVersion.Version11) {
+          _context.ErrorMessage = "Invalid Transfer-Encoding header";
+          return;
+        }
+
         var comparison = StringComparison.OrdinalIgnoreCase;
         if (!transferEnc.Equals ("chunked", comparison)) {
           _context.ErrorMessage = String.Empty;
@@ -712,8 +663,8 @@ namespace WebSocketSharp.Net
         _chunked = true;
       }
 
-      if (_httpMethod == "POST" || _httpMethod == "PUT") {
-        if (_contentLength <= 0 && !_chunked) {
+      if (_contentLength == -1 && !_chunked) {
+        if (_httpMethod == "POST" || _httpMethod == "PUT") {
           _context.ErrorMessage = String.Empty;
           _context.ErrorStatus = 411;
 
@@ -722,7 +673,7 @@ namespace WebSocketSharp.Net
       }
 
       var expect = _headers["Expect"];
-      if (expect != null) {
+      if (_protocolVersion > HttpVersion.Version10 && expect != null) {
         var comparison = StringComparison.OrdinalIgnoreCase;
         if (!expect.Equals ("100-continue", comparison)) {
           _context.ErrorMessage = "Invalid Expect header";
@@ -736,8 +687,7 @@ namespace WebSocketSharp.Net
 
     internal bool FlushInput ()
     {
-      var input = InputStream;
-      if (input == Stream.Null)
+      if (!HasEntityBody)
         return true;
 
       var len = 2048;
@@ -748,14 +698,14 @@ namespace WebSocketSharp.Net
 
       while (true) {
         try {
-          var ares = input.BeginRead (buff, 0, len, null, null);
+          var ares = InputStream.BeginRead (buff, 0, len, null, null);
           if (!ares.IsCompleted) {
             var timeout = 100;
             if (!ares.AsyncWaitHandle.WaitOne (timeout))
               return false;
           }
 
-          if (input.EndRead (ares) <= 0)
+          if (InputStream.EndRead (ares) <= 0)
             return true;
         }
         catch {
@@ -783,9 +733,14 @@ namespace WebSocketSharp.Net
         return;
       }
 
-      var target = parts[1];
-      if (target.Length == 0) {
-        _context.ErrorMessage = "Invalid request line (target)";
+      if (!method.IsToken ()) {
+        _context.ErrorMessage = "Invalid request line (method)";
+        return;
+      }
+
+      var uri = parts[1];
+      if (uri.Length == 0) {
+        _context.ErrorMessage = "Invalid request line (uri)";
         return;
       }
 
@@ -811,13 +766,8 @@ namespace WebSocketSharp.Net
         return;
       }
 
-      if (!method.IsHttpMethod (ver)) {
-        _context.ErrorMessage = "Invalid request line (method)";
-        return;
-      }
-
       _httpMethod = method;
-      _rawUrl = target;
+      _uri = uri;
       _protocolVersion = ver;
     }
 
@@ -826,81 +776,83 @@ namespace WebSocketSharp.Net
     #region Public Methods
 
     /// <summary>
-    /// Begins getting the certificate provided by the client asynchronously.
+    /// Begins getting the client's X.509 v.3 certificate asynchronously.
     /// </summary>
+    /// <remarks>
+    /// This asynchronous operation must be completed by calling
+    /// the <see cref="EndGetClientCertificate"/> method. Typically,
+    /// that method is invoked by the <paramref name="requestCallback"/> delegate.
+    /// </remarks>
     /// <returns>
-    /// An <see cref="IAsyncResult"/> instance that indicates the status of the
-    /// operation.
+    /// An <see cref="IAsyncResult"/> that contains the status of the asynchronous operation.
     /// </returns>
     /// <param name="requestCallback">
-    /// An <see cref="AsyncCallback"/> delegate that invokes the method called
-    /// when the operation is complete.
+    /// An <see cref="AsyncCallback"/> delegate that references the method(s) called when
+    /// the asynchronous operation completes.
     /// </param>
     /// <param name="state">
-    /// An <see cref="object"/> that represents a user defined object to pass to
-    /// the callback delegate.
+    /// An <see cref="object"/> that contains a user defined object to pass to
+    /// the <paramref name="requestCallback"/> delegate.
     /// </param>
-    /// <exception cref="NotSupportedException">
-    /// This method is not supported.
+    /// <exception cref="NotImplementedException">
+    /// This method isn't implemented.
     /// </exception>
-    public IAsyncResult BeginGetClientCertificate (
-      AsyncCallback requestCallback, object state
-    )
+    public IAsyncResult BeginGetClientCertificate (AsyncCallback requestCallback, object state)
     {
-      throw new NotSupportedException ();
+      // TODO: Not implemented.
+      throw new NotImplementedException ();
     }
 
     /// <summary>
-    /// Ends an asynchronous operation to get the certificate provided by the
-    /// client.
+    /// Ends an asynchronous operation to get the client's X.509 v.3 certificate.
     /// </summary>
+    /// <remarks>
+    /// This method completes an asynchronous operation started by calling
+    /// the <see cref="BeginGetClientCertificate"/> method.
+    /// </remarks>
     /// <returns>
-    /// A <see cref="X509Certificate2"/> that represents an X.509 certificate
-    /// provided by the client.
+    /// A <see cref="X509Certificate2"/> that contains the client's X.509 v.3 certificate.
     /// </returns>
     /// <param name="asyncResult">
-    /// An <see cref="IAsyncResult"/> instance returned when the operation
-    /// started.
+    /// An <see cref="IAsyncResult"/> obtained by calling
+    /// the <see cref="BeginGetClientCertificate"/> method.
     /// </param>
-    /// <exception cref="NotSupportedException">
-    /// This method is not supported.
+    /// <exception cref="NotImplementedException">
+    /// This method isn't implemented.
     /// </exception>
     public X509Certificate2 EndGetClientCertificate (IAsyncResult asyncResult)
     {
-      throw new NotSupportedException ();
+      // TODO: Not implemented.
+      throw new NotImplementedException ();
     }
 
     /// <summary>
-    /// Gets the certificate provided by the client.
+    /// Gets the client's X.509 v.3 certificate.
     /// </summary>
     /// <returns>
-    /// A <see cref="X509Certificate2"/> that represents an X.509 certificate
-    /// provided by the client.
+    /// A <see cref="X509Certificate2"/> that contains the client's X.509 v.3 certificate.
     /// </returns>
-    /// <exception cref="NotSupportedException">
-    /// This method is not supported.
+    /// <exception cref="NotImplementedException">
+    /// This method isn't implemented.
     /// </exception>
     public X509Certificate2 GetClientCertificate ()
     {
-      throw new NotSupportedException ();
+      // TODO: Not implemented.
+      throw new NotImplementedException ();
     }
 
     /// <summary>
-    /// Returns a string that represents the current instance.
+    /// Returns a <see cref="string"/> that represents
+    /// the current <see cref="HttpListenerRequest"/>.
     /// </summary>
     /// <returns>
-    /// A <see cref="string"/> that contains the request line and headers
-    /// included in the request.
+    /// A <see cref="string"/> that represents the current <see cref="HttpListenerRequest"/>.
     /// </returns>
     public override string ToString ()
     {
       var buff = new StringBuilder (64);
-
-      buff
-      .AppendFormat (
-        "{0} {1} HTTP/{2}\r\n", _httpMethod, _rawUrl, _protocolVersion
-      )
-      .Append (_headers.ToString ());
+      buff.AppendFormat ("{0} {1} HTTP/{2}\r\n", _httpMethod, _uri, _protocolVersion);
+      buff.Append (_headers.ToString ());
 
       return buff.ToString ();
     }

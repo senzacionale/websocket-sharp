@@ -4,7 +4,7 @@
  *
  * The MIT License
  *
- * Copyright (c) 2013-2018 sta.blockhead
+ * Copyright (c) 2013-2014 sta.blockhead
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -32,31 +32,17 @@ using WebSocketSharp.Net.WebSockets;
 namespace WebSocketSharp.Server
 {
   /// <summary>
-  /// Exposes the access to the information in a WebSocket session.
+  /// Exposes the properties used to access the information in a session in a WebSocket service.
   /// </summary>
   public interface IWebSocketSession
   {
     #region Properties
 
     /// <summary>
-    /// Gets the current state of the WebSocket connection for the session.
+    /// Gets the information in the connection request to the WebSocket service.
     /// </summary>
     /// <value>
-    ///   <para>
-    ///   One of the <see cref="WebSocketState"/> enum values.
-    ///   </para>
-    ///   <para>
-    ///   It indicates the current state of the connection.
-    ///   </para>
-    /// </value>
-    WebSocketState ConnectionState { get; }
-
-    /// <summary>
-    /// Gets the information in the WebSocket handshake request.
-    /// </summary>
-    /// <value>
-    /// A <see cref="WebSocketContext"/> instance that provides the access to
-    /// the information in the handshake request.
+    /// A <see cref="WebSocketContext"/> that provides the access to the connection request.
     /// </value>
     WebSocketContext Context { get; }
 
@@ -69,11 +55,10 @@ namespace WebSocketSharp.Server
     string ID { get; }
 
     /// <summary>
-    /// Gets the name of the WebSocket subprotocol for the session.
+    /// Gets the WebSocket subprotocol used in the session.
     /// </summary>
     /// <value>
-    /// A <see cref="string"/> that represents the name of the subprotocol
-    /// if present.
+    /// A <see cref="string"/> that represents the subprotocol if any.
     /// </value>
     string Protocol { get; }
 
@@ -81,10 +66,18 @@ namespace WebSocketSharp.Server
     /// Gets the time that the session has started.
     /// </summary>
     /// <value>
-    /// A <see cref="DateTime"/> that represents the time that the session
-    /// has started.
+    /// A <see cref="DateTime"/> that represents the time that the session has started.
     /// </value>
     DateTime StartTime { get; }
+
+    /// <summary>
+    /// Gets the state of the <see cref="WebSocket"/> used in the session.
+    /// </summary>
+    /// <value>
+    /// One of the <see cref="WebSocketState"/> enum values, indicates the state of
+    /// the <see cref="WebSocket"/> used in the session.
+    /// </value>
+    WebSocketState State { get; }
 
     #endregion
   }

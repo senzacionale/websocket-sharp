@@ -766,6 +766,11 @@ namespace WebSocketSharp.Server
     public event EventHandler<HttpRequestEventArgs> OnOptions;
 
     /// <summary>
+    /// Occurs when the server receives an HTTP PATCH request.
+    /// </summary>
+    public event EventHandler<HttpRequestEventArgs> OnPatch;
+
+    /// <summary>
     /// Occurs when the server receives an HTTP POST request.
     /// </summary>
     public event EventHandler<HttpRequestEventArgs> OnPost;
@@ -899,13 +904,15 @@ namespace WebSocketSharp.Server
                       ? OnPut
                       : method == "DELETE"
                         ? OnDelete
-                        : method == "CONNECT"
-                          ? OnConnect
-                          : method == "OPTIONS"
-                            ? OnOptions
-                            : method == "TRACE"
-                              ? OnTrace
-                              : null;
+                        : method == "OPTIONS"
+                          ? OnOptions
+                          : method == "TRACE"
+                            ? OnTrace
+                            : method == "CONNECT"
+                              ? OnConnect
+                              : method == "PATCH"
+                                ? OnPatch
+                                : null;
 
       if (evt != null)
         evt (this, new HttpRequestEventArgs (context, _docRootPath));
@@ -917,13 +924,7 @@ namespace WebSocketSharp.Server
 
     private void processRequest (HttpListenerWebSocketContext context)
     {
-      var uri = context.RequestUri;
-      if (uri == null) {
-        context.Close (HttpStatusCode.BadRequest);
-        return;
-      }
-
-      var path = uri.AbsolutePath;
+      var path = context.RequestUri.AbsolutePath;
 
       WebSocketServiceHost host;
       if (!_services.InternalTryGetServiceHost (path, out host)) {
